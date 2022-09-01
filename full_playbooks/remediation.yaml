@@ -1,0 +1,75 @@
+---
+- hosts: evdcirht03
+  become: true
+  tasks:
+  - fail:
+      msg: "Cannot run playbook. Check the OS release in /etc/redhat-release. Detected {{ ansible_facts['distribution_major_version'] }}"
+    tags: failsafe
+    when: ansible_facts['distribution_major_version'] != "7"
+
+  - name: Check if pata_acpi module is installed
+    ansible.builtin.shell: /usr/sbin/lsmod | grep pata_acpi
+    register: pata_acpi
+    failed_when: false
+    check_mode: false
+
+  - name: Disable unsupported kernel module pata_acpi
+    ansible.builtin.command:
+      cmd: rmmod pata-acpi
+    when: pata_acpi.rc == 0
+  - debug:
+      msg: "Support for the following RHEL 7 device drivers has been removed in RHEL 8"
+
+  - name: Check for PermitRootLogin
+    ansible.builtin.shell: grep -E '^PermitRootLogin|^#PermitRootLogin' /etc/ssh/sshd_config
+    register: permit_root_login
+    changed_when: false
+  - debug:
+      msg: 'OpenSSH configuration file does not explicitly state the option PermitRootLogin in sshd_config file, which will default in RHEL8 to "prohibit-password".Remediation: [hint] If you depend on remote root logins using passwords, consider setting up a different user for remote administration or adding "PermitRootLogin yes" to sshd_config.'
+
+  - name: Set PermitRootLogin to No (already exists)
+    ansible.builtin.lineinfile:
+      path: /etc/ssh/sshd_config
+      regex: '^PermitRootLogin|^#PermitRootLogin'
+      line: 'PermitRootLogin no'
+    when: permit_root_login.rc == 0
+  - debug:
+      msg: 'The line PermitRootLogin already exists and will be modified "no".'
+
+  - name: Add PermitRootLogin No
+    ansible.builtin.lineinfile:
+      path: /etc/ssh/sshd_config
+      line: 'PermitRootLogin no'
+    when: permit_root_login.rc == 1
+  - debug:
+      msg: 'The line PermitRootLogin was not found and will be added.'
+
+  - name: Verify PermitRootLogin is set to no
+    shell: grep 'PermitRootLogin no' /etc/ssh/sshd_config
+    register: permit_root_login_no_exists
+  - debug:
+      msg: '/etc/ssh/sshd_config verified. Ready to reboot sshd.'
+
+  - name: Restart sshd to apply changes
+    ansible.builtin.service:
+      name: sshd
+      state: restarted
+    when: permit_root_login_no_exists.rc == 0
+  - debug:
+      msg: 'Restarting sshd with changes.'
+
+  - name: Check if the answerfile exists
+    stat:
+      path: /var/log/leapp/answerfile
+    register: file_check
+  - debug:
+      msg: "answerfile already exists in /var/log/leapp/. Please review and run the playbook again."
+    when: file_check.stat.exists
+  - debug:
+      msg: "answerfile does not exist. Creating answerfile in the following step."
+    when: file_check.stat.exists == False
+
+  - name: Answering required questions in the answerfile
+    ansible.builtin.shell: '/bin/leapp answer --section authselect_check.confirm=True && /bin/leapp answer --section remove_pam_pkcs11_module_check.confirm=True'
+  - debug:
+      msg: 'One or more sections in answerfile are missing userchoices: authselect_check.confirmFor more information consult https://leapp.readthedocs.io/en/latest/dialogs.htmlRemediation: [hint] Please register user choices with leapp answer cli command or by manually editing the answerfile.'

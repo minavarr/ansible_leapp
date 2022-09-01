@@ -1,0 +1,28 @@
+---
+- hosts:
+  become: true
+  tasks:
+    - fail:
+        msg: "Cannot run playbook. Check the OS release in /etc/redhat-release. Detected {{ ansible_facts['distribution_major_version'] }}"
+      tags: failsafe
+      when: ansible_facts['distribution_major_version'] != "7"
+    - debug:
+        msg: "Running the leapp upgrade to RHEL 8"
+
+    - name: Run the upgrade
+      command: leapp upgrade
+    - debug:
+        msg: "Pruning cache files."
+
+    - name: Remove SSSD cache files
+      shell: "rm -rf /var/lib/sss/db/*.ldb"
+      args:
+        warn: false
+      tags: removecache
+    - debug:
+        msg: "Rebooting system and ending play. Wait for upgraded system to become available before running next play. Estimated wait time is between 10 and 15 minutes."
+
+    - name: Reboot system
+      reboot:
+        reboot_timeout: 1200
+      tags: removecache

@@ -1,0 +1,48 @@
+---
+- hosts: 
+  become: true
+  tasks:
+    - fail:
+        msg: "Cannot run playbook. Check the OS release in /etc/redhat-release. Detected {{ ansible_facts['distribution_major_version'] }}"
+      tags: failsafe
+      when: ansible_facts['distribution_major_version'] != "8"
+
+    - name: Set Alternatives python3 > python
+      alternatives:
+        name: python
+        path: /usr/bin/python3
+
+    - name: Set SELinux to enforcing
+      selinux:
+        policy: targeted
+        state: enforcing
+
+    - name: Remove el7 packages
+      shell: for i in `rpm -qa | grep -e '\.el[67]' | grep -vE '^(gpg-pubkey|libmodulemd|katello-ca-consumer)'`; do yum remove -y; done
+
+    - name: remove remaining LEAPP packages
+      ansible.builtin.yum:
+        name:
+          - leapp
+          - python2-leapp
+        state: absent
+
+    - name: Remove excluded packages from DNF
+      lineinfile:
+        path: /etc/dnf/dnf.conf
+        regexp: ^exclude=*
+        line: exclude=
+
+    - name: Enable Satellite Client Tools Repository for RHEL8
+      rhsm_repository:
+        name: satellite-client-6-for-rhel-8-x86_64-rpms
+        state: enabled
+
+    - name: Install katello-agent
+      ansible.builtin.yum:
+        name: katello-agent
+        state: present
+
+    - name: Reboot system
+      reboot:
+        reboot_timeout: 1200

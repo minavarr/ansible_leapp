@@ -1,0 +1,79 @@
+---
+- hosts:
+  become: true
+  vars:
+    RHEL_repos:
+      - rhel-7-server-rpms
+      - rhel-7-server-extras-rpms
+      - rhel-7-server-satellite-client-6-rpms
+
+  tasks:
+  - fail:
+      msg: "Cannot run playbook. Check the OS release in /etc/redhat-release. Detected {{ ansible_facts['distribution_major_version'] }}"
+    tags: failsafe
+    when: ansible_facts['distribution_major_version'] != "7"
+
+  - name: Enable RHEL 7 repositories
+    rhsm_repository:
+      name: "{{ RHEL_repos }}"
+      state: enabled
+
+  - name: Unset the release version
+    rhsm_release:
+      release: null
+
+  - name: Yum update the system
+    ansible.builtin.yum:
+      update_only: yes
+      state: latest
+    register: yum_update
+
+  - name: Reboot the system
+    ansible.builtin.reboot:
+      msg: System reboot initiated by Ansible.
+    when: yum_update.changed
+
+  - name: Install LEAPP-Upgrade
+    ansible.builtin.yum:
+      name: leapp-upgrade
+      state: latest
+
+  - name: Check if metadata exists in /etc/leapp/files
+    shell: ls /etc/leapp/files | wc -l
+    register: metadata_check
+    changed_when: false
+
+  - name: Create directory for missing metadata
+    ansible.builtin.file:
+      path: /etc/leapp/files
+      state: directory
+      owner: root
+      group: root
+      mode: 755
+    when: metadata_check.rc != 0
+
+  - name: Copy missing metadata
+    ansible.builtin.copy:
+      src: /home/ansible_leapp/files/
+      dest: /etc/leapp/files/
+      owner: root
+      group: root
+      mode: 755
+    when: metadata_check.stdout == "0"
+
+  - name: Check if answerfile has been answered
+    script: /home/ansible_leapp/files/check_answerfile.sh
+    register: answerfile_answered
+    changed_when: false
+    failed_when: false
+  - debug:
+      msg: "Checking for the required answers in the answerfile. If answered, the leapp preupgrade will be skipped. Detected: {{ answerfile_answered.stdout }}"
+
+  - name: Run LEAPP pre-assesment (will always fail unless fully remediated)
+    ansible.builtin.command:
+      cmd: leapp preupgrade --target 8.6
+    when: answerfile_answered.rc != 0
+    register: wait_error
+    failed_when: false
+  - debug:
+      msg: "Leapp Report Generated: {{ wait_error }}"

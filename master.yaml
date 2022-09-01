@@ -1,0 +1,25 @@
+---
+- hosts:
+  become: true
+  vars:
+    RHEL_repos:
+      - rhel-7-server-rpms
+      - rhel-7-server-extras-rpms
+      - rhel-7-server-satellite-client-6-rpms
+
+  tasks:
+    - name: Preparing systems
+      import_tasks: prepare_tasks_only.yaml
+      tags: prepare_system, recommended_step_1
+    - name: Remediate errors
+      import_tasks: remediation_tasks_only.yaml
+      tags: remediate_errors, recommended_step_1
+    - name: Prepare system after error remediation
+      import_tasks: prepare_tasks_only.yaml
+      tags: prepare_system, recommended_step_1
+    - name: Run leapp upgrade and clear cache
+      import_tasks: run_upgrade_tasks_only.yaml
+      tags: run_upgrade, recommended_step_2
+    - name: Post upgrade fixes
+      import_tasks: post_upgrade_tasks_only.yaml
+      tags: post_upgrade, recommended_step_3
