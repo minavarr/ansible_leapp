@@ -1,6 +1,7 @@
 IMPORTANT: 
 
-- Currently the missing metadata is NOT included and must be included seperately in the ~/files directory if the client systems have no access to the public internet.
+- Currently the missing metadata is NOT included and must be included seperately in the ~/files directory if the client systems have no access to the public internet. Review the logic around this step and adjust according to your use case.
+
 - These are guidelines, we wouldn't expect this to work without modification everywhere. Adjustment will be necessary depending on the environment.
 
 This is a collection of Ansible playbooks intended to upgrade a baseline RHEL 7.9 system to RHEL 8.6 utilizing LEAPP, an Ansible control node and Satellite. The playbooks are grouped into "*_task_only.yaml" varieties intended to be run with the "master.yaml" playbook. The remaining playbooks are standalone versions of the various tasks.
